@@ -17,6 +17,9 @@ const emptyRootBeforeEach = () => {
   return root
 }
 
+const countCallsForEventType = (spy, type) =>
+  spy.mock.calls.filter(([calledType]) => calledType === type).length
+
 describe('mediumZoom()', () => {
   test('is defined and returns an object', () => {
     expect(mediumZoom).toBeDefined()
@@ -308,6 +311,23 @@ describe('attach()', () => {
     expect(zoom.getImages()).toEqual([image1, image2])
   })
 
+  test('attach() registers document click handler only once (0 -> >0 images)', () => {
+    const addEventListenerSpy = jest.spyOn(document, 'addEventListener')
+
+    const image1 = document.createElement('img')
+    const image2 = document.createElement('img')
+    root.appendChild(image1)
+    root.appendChild(image2)
+
+    const zoom = mediumZoom()
+    zoom.attach(image1)
+    zoom.attach(image2)
+
+    expect(countCallsForEventType(addEventListenerSpy, 'click')).toBe(1)
+
+    addEventListenerSpy.mockRestore()
+  })
+
   test('attach(Node) attaches images', () => {
     const image1 = document.createElement('img')
     const image2 = document.createElement('img')
@@ -380,6 +400,8 @@ describe('detach()', () => {
   })
 
   test('detach() detaches all images', () => {
+    const removeEventListenerSpy = jest.spyOn(document, 'removeEventListener')
+
     const image1 = document.createElement('img')
     const image2 = document.createElement('img')
     root.appendChild(image1)
@@ -391,6 +413,9 @@ describe('detach()', () => {
     expect(zoom.getImages()).toEqual([])
     expect(image1.classList).toHaveLength(0)
     expect(image2.classList).toHaveLength(0)
+    expect(countCallsForEventType(removeEventListenerSpy, 'click')).toBe(1)
+
+    removeEventListenerSpy.mockRestore()
   })
 
   test('detach(string) detaches images', () => {
@@ -408,6 +433,8 @@ describe('detach()', () => {
   })
 
   test('detach(Node) detaches images', () => {
+    const removeEventListenerSpy = jest.spyOn(document, 'removeEventListener')
+
     const image1 = document.createElement('img')
     const image2 = document.createElement('img')
     root.appendChild(image1)
@@ -419,6 +446,9 @@ describe('detach()', () => {
     expect(zoom.getImages()).toEqual([image2])
     expect(image1.classList).toHaveLength(0)
     expect(image2.classList).toHaveLength(1)
+    expect(countCallsForEventType(removeEventListenerSpy, 'click')).toBe(0)
+
+    removeEventListenerSpy.mockRestore()
   })
 
   test('detach(Node, Node) detaches images', () => {
@@ -780,6 +810,23 @@ describe('open()', () => {
     }).not.toThrow()
   })
 
+  test('open() without images does not register global listeners', async () => {
+    expect.assertions(3)
+
+    const addDocumentListenerSpy = jest.spyOn(document, 'addEventListener')
+    const addWindowListenerSpy = jest.spyOn(window, 'addEventListener')
+
+    const zoom = mediumZoom()
+    await zoom.open()
+
+    expect(countCallsForEventType(addDocumentListenerSpy, 'keyup')).toBe(0)
+    expect(countCallsForEventType(addDocumentListenerSpy, 'scroll')).toBe(0)
+    expect(countCallsForEventType(addWindowListenerSpy, 'resize')).toBe(0)
+
+    addDocumentListenerSpy.mockRestore()
+    addWindowListenerSpy.mockRestore()
+  })
+
   test('open() returns a Promise resolving the zoom', async () => {
     expect.assertions(1)
 
@@ -1076,6 +1123,57 @@ describe('close()', () => {
 
     expect(zoom.close).toBeDefined()
     expect(zoom.close()).toBeInstanceOf(Promise)
+  })
+
+  test('close() during opening does not unregister global listeners', async () => {
+    expect.assertions(6)
+
+    const previousTestFlag = global.__TEST__
+
+    const removeDocumentListenerSpy = jest.spyOn(
+      document,
+      'removeEventListener'
+    )
+    const removeWindowListenerSpy = jest.spyOn(window, 'removeEventListener')
+
+    try {
+      global.__TEST__ = false
+
+      const image = document.createElement('img')
+      root.appendChild(image)
+
+      const zoom = mediumZoom(image)
+
+      const openPromise = zoom.open()
+      zoom.close()
+
+      expect(countCallsForEventType(removeDocumentListenerSpy, 'keyup')).toBe(0)
+      expect(countCallsForEventType(removeDocumentListenerSpy, 'scroll')).toBe(
+        0
+      )
+      expect(countCallsForEventType(removeWindowListenerSpy, 'resize')).toBe(0)
+
+      const openedImage = document.querySelector('.medium-zoom-image--opened')
+      openedImage.dispatchEvent(new Event('transitionend'))
+      await openPromise
+
+      const closePromise = zoom.close()
+      const openedImageToClose = document.querySelector(
+        '.medium-zoom-image--opened'
+      )
+      openedImageToClose.dispatchEvent(new Event('transitionend'))
+      await closePromise
+
+      expect(countCallsForEventType(removeDocumentListenerSpy, 'keyup')).toBe(1)
+      expect(countCallsForEventType(removeDocumentListenerSpy, 'scroll')).toBe(
+        1
+      )
+      expect(countCallsForEventType(removeWindowListenerSpy, 'resize')).toBe(1)
+    } finally {
+      removeDocumentListenerSpy.mockRestore()
+      removeWindowListenerSpy.mockRestore()
+      global.__TEST__ = previousTestFlag
+    }
   })
 
   test('mediumZoom(Node).close() renders correctly', async () => {
