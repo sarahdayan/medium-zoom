@@ -523,7 +523,7 @@ If that's the case, you can provide a `z-index` value in your CSS:
 
 ## Used by
 
-[![Dependents](https://api.usedby.dev/npm/medium-zoom?max=50)](https://www.npmjs.com/package/medium-zoom?activeTab=dependents)
+[![Dependents](https://api.usedby.dev/npm/medium-zoom?max=50&sort=stars)](https://github.com/francoischalifour/medium-zoom/network/dependents)
 
 <sub>Generated with <a href="https://usedby.dev/">usedby.dev</a></sub>
 
